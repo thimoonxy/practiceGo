@@ -26,24 +26,28 @@ func main() {
 		url = "http://" + url
 	}
 	ip, _ := net.LookupIP(host)
-	client := &http.Client{}
+
+	tr := &http.Transport{
+		DisableCompression: true,
+	}
+
+	client := &http.Client{Transport:tr}
 	req, err := http.NewRequest("GET", url, nil)
 	req.Proto = "HTTP/1.1"
 
 	req.Header.Add("User-Agent",
 		"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36")
+	req.Header.Del("Accept-Encoding")
 	//	req.Header.Add("Accept",
 	//		"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	//	req.Header.Add("Accept-Encoding",
-	//		"gzip, deflate, sdch, br")
+	//	"gzip, deflate, sdch, br")
 
 	res, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	outputs, err := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,10 +55,12 @@ func main() {
 	dump, _ := httputil.DumpRequest(req, true)
 	fmt.Println(string(dump))
 
-	dump, _ = httputil.DumpResponse(res, true)
+	dump, _ = httputil.DumpResponse(res, false)
 	fmt.Println(string(dump))
 
 	//	fmt.Println(req.ContentLength)
+	outputs, err := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 
 	if os.Args[2] == "-p" || os.Args[2] == "--print" {
 		fmt.Println(string(outputs))

@@ -28,7 +28,7 @@ func Curl(url string) []byte {
 	for _, v := range img.FindAllSubmatch(out, 2000) {
 		//		fmt.Println(string(v[1]))
 		go homehtmls.Curl(string(v[1]), false)
-		homehtmls.Curl(string(v[1]), false)
+		//		homehtmls.Curl(string(v[1]), false)
 		fmt.Println("<img src=\"" + string(v[1]) + "\">")
 	}
 	return out

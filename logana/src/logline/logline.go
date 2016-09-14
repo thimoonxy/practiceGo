@@ -105,7 +105,6 @@ func urlperdepth(depth int, url string) (string, string, string) {
 		offset = 0
 		sep = -1
 	}
-	//	url := "http://store.dota2.com.cn/webapi/IDOTA2MatchStats/GetRealtimeStats/v001?server_steam_id=90098925510295559&"
 
 	partten := regexp.MustCompile("^((https?)://)?(.*)")
 	match := partten.FindStringSubmatch(url)

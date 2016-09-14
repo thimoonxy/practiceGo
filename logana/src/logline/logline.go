@@ -1,6 +1,7 @@
 package logline
 
 import (
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -42,14 +43,14 @@ type Varnishlog_line struct {
 
 		%user-agent
 	*/
-	Remote_host, Log_name, Auth_user, URL, Protocol, Reference, User_agent, Method, raw_data string
-	Time_stamp                                                                               time.Time
-	Status                                                                                   int
-	Response_size                                                                            int64
+	Remote_host, Log_name, Auth_user, URL, Protocol, Reference, User_agent, Method, Raw_data, Scheme, Hostname, ReferenceHostname, ReferenceScheme string
+	Time_stamp                                                                                                                                     time.Time
+	Status                                                                                                                                         int
+	Response_size                                                                                                                                  float64
 }
 
-func (log *Varnishlog_line) logfield(line string) {
-	log.raw_data = line
+func (log *Varnishlog_line) LogFieldGen(line string) {
+	log.Raw_data = line
 
 	// Common fields
 	partten := regexp.MustCompile("([\\S]+)")
@@ -62,7 +63,8 @@ func (log *Varnishlog_line) logfield(line string) {
 		log.URL = match[6][1]
 		log.Protocol = strings.Trim(match[7][1], "\"")
 		log.Status, _ = strconv.Atoi(match[8][1])
-		log.Response_size, _ = strconv.ParseInt(match[9][1], 10, 64)
+		//		log.Response_size, _ = strconv.ParseInt(match[9][1], 10, 64)
+		log.Response_size, _ = strconv.ParseFloat(match[9][1], 64)
 	}
 	//reference
 	reference := regexp.MustCompile("\"([\\S]+)\"")
@@ -88,4 +90,52 @@ func (log *Varnishlog_line) logfield(line string) {
 		log.Time_stamp, _ = time.Parse("2006 Jan 02 15:04:05 -0700", time_value_string)
 	}
 
+}
+
+func (log Varnishlog_line) FieldValue(fieldname string) interface{} {
+	v := reflect.ValueOf(log)
+	return v.FieldByName(fieldname).Interface()
+}
+
+func urlperdepth(depth int, url string) (string, string, string) {
+
+	sep := 2 + depth
+	offset := 1
+	if depth <= 0 {
+		offset = 0
+		sep = -1
+	}
+	//	url := "http://store.dota2.com.cn/webapi/IDOTA2MatchStats/GetRealtimeStats/v001?server_steam_id=90098925510295559&"
+
+	partten := regexp.MustCompile("^((https?)://)?(.*)")
+	match := partten.FindStringSubmatch(url)
+	raw_scheme := match[1]
+	scheme := match[2]
+
+	uri := match[3]
+	var result string = raw_scheme
+
+	list := strings.Split(uri, "/")
+	list1 := strings.SplitAfterN(uri, "/", sep)
+	hostname := list[0]
+
+	for i := 0; i < len(list1)-offset; i++ {
+		result += list1[i]
+	}
+
+	return result, hostname, scheme
+}
+
+func (log *Varnishlog_line) URLdepth(depth int) {
+	uri, hostname, scheme := urlperdepth(depth, log.URL)
+	log.URL = uri
+	log.Hostname = hostname
+	log.Scheme = scheme
+}
+
+func (log *Varnishlog_line) ReferenceDepth(depth int) {
+	uri, hostname, scheme := urlperdepth(depth, log.Reference)
+	log.Reference = uri
+	log.ReferenceHostname = hostname
+	log.ReferenceScheme = scheme
 }

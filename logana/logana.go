@@ -1,20 +1,16 @@
 package main
 
 import (
-	"fmt"
-	//	"runtime"
-	//	"sync"
 	"bufio"
 	"compress/gzip"
-	//	"io"
-	//	"io/ioutil"
+	"fmt"
 	"os"
 	"practiceGo/logana/src/logline"
+	"practiceGo/logana/src/output"
 	"reflect"
-	"strconv"
 )
 
-func FieldCounter(buf *bufio.Reader, starttime int64, endtime int64, fieldname string, depth int) (interface{}, interface{}, interface{}) {
+func FieldCounter(buf *bufio.Reader, starttime int64, endtime int64, fieldname string, depth int) (map[interface{}]float64, map[interface{}]float64, float64) {
 	counter := map[interface{}]float64{}
 
 	r := reflect.ValueOf(counter)
@@ -55,14 +51,15 @@ func FieldCounter(buf *bufio.Reader, starttime int64, endtime int64, fieldname s
 		}
 	}
 	// stat section
-	stat := map[interface{}]string{}
+	stat := map[interface{}]float64{}
 	var sum float64
 	for _, v := range counter {
 		sum += v
 	}
 	for k, _ := range counter {
 		percent := (counter[k]) / sum * 100
-		stat[k] = strconv.FormatFloat(percent, 'f', 2, 64) + "%"
+		//		stat[k] = strconv.FormatFloat(percent, 'f', 2, 64) + "%"
+		stat[k] = percent
 	}
 
 	return counter, stat, sum
@@ -75,8 +72,22 @@ func main() {
 	buf := bufio.NewReader(g)
 	//	l := &io.LimitedReader{R: buf, N: 20}
 	//	io.Copy(ioutil.Discard, l.R)
-	counter, stat, sum := FieldCounter(buf, 1452599529, 1452599530, "Hostname", 0)
-	fmt.Println(counter)
-	fmt.Println(stat)
-	fmt.Println(sum)
+
+	depth := 2
+	fieldname := "Hostname"
+	counter, stat, sum := FieldCounter(buf, 1452599529, 1452599530, fieldname, depth)
+	//	fmt.Println(counter)
+	//	fmt.Println(stat)
+	//	fmt.Println(sum)
+
+	slice := new(output.Output_slice)
+	slice.Output_slice_gen(counter, stat, sum)
+	fmt.Printf("Percent        Count          Field - %s  \n", fieldname)
+
+	fmt.Println("_______________________________________________")
+	for _, record := range slice.Records {
+		fmt.Printf("%6s        %6.0f          %s  \n", record.Fmt_Percent, record.Number, record.Name)
+	}
+	fmt.Println("_______________________________________________")
+	fmt.Printf("Totally %.0f lines during the qurey time period.\n", slice.Sum)
 }

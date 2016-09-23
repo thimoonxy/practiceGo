@@ -40,9 +40,9 @@ func (s Records) Less(i, j int) bool {
 	return s[j].Percent < s[i].Percent
 }
 
-func (a Records) Len() int { // 重写 Len() 方法
+func (a Records) Len() int {
 	return len(a)
 }
-func (a Records) Swap(i, j int) { // 重写 Swap() 方法
+func (a Records) Swap(i, j int) {
 	a[i], a[j] = a[j], a[i]
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/mitchellh/ioprogress"
+	"github.com/wjkohnen/bwio"
 	"io"
 	"io/ioutil"
 	"os"
@@ -10,13 +12,12 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/mitchellh/ioprogress"
 )
 
 var (
 	src, dst *string
 	err      error
+	bw       *int
 )
 var verbose = new(bool)
 var human = new(bool)
@@ -29,6 +30,8 @@ func main() {
 	pwd, _ := os.Getwd()
 	src = flag.String("s", pwd, "src folder path")
 	dst = flag.String("d", pwd, "dst folder path")
+	bw = flag.Int("l", 0, "Bandwitdh limts, default 50MB/s")
+
 	//	*verbose = false
 	flag.BoolVar(verbose, "v", false, "Print Verbose.")
 	flag.BoolVar(human, "h", false, "Print human readable output .")
@@ -39,7 +42,8 @@ func main() {
 	*src = strings.Replace(*src, "\\", "/", -1)
 	*dst = strings.Replace(*dst, "\\", "/", -1)
 	flag.Parse()
-	fmt.Printf("src: %s\ndst: %s\nCopying...\n\n", *src, *dst)
+	*bw = *bw <<20
+	fmt.Printf("src: %s\ndst: %s\nCopying ...\n\n", *src, *dst)
 
 	lsrc := flag.Lookup("s")
 	if lsrc.Value.String() == lsrc.DefValue {
@@ -104,14 +108,29 @@ func byteUnitStr(n int64) string {
 }
 
 func cp(src_fname, dst_fname string) {
+
+	var (
+		draw  ioprogress.DrawFunc
+		bwsrc *bwio.Reader
+		bwdst *bwio.Writer
+	)
+	lbw := flag.Lookup("l")
+
 	dst, _ := os.Create(dst_fname)
 	src, _ := os.Open(src_fname)
 	src_stat, _ := src.Stat()
+	if lbw.Value.String() != lbw.DefValue {
+
+		bwsrc = bwio.NewReader(src, *bw)
+		bwdst = bwio.NewWriter(dst, *bw)
+
+	}
+
 	st := os.Stdout
 	if *verbose == true {
 		fmt.Fprintf(st, "%s\n", dst_fname)
 	}
-	var draw ioprogress.DrawFunc
+
 	if *human == true {
 		draw = DrawTerminal(st)
 	} else {
@@ -119,12 +138,22 @@ func cp(src_fname, dst_fname string) {
 	}
 
 	progressR := &ioprogress.Reader{
-		Reader:   src,
+		//		Reader:   src,
 		Size:     src_stat.Size(),
 		DrawFunc: draw,
 	}
-	if *progress == true {
+
+	if *progress == true && lbw.Value.String() == lbw.DefValue {
+		progressR.Reader = src
 		_, err = io.Copy(dst, progressR)
+	} else if *progress == true && lbw.Value.String() != lbw.DefValue {
+		progressR.Reader = bwsrc
+//		fmt.Println(*bw)
+		bwio.Copy(bwdst, progressR, *bw)
+	} else if *progress == false && lbw.Value.String() != lbw.DefValue {
+//		fmt.Println(*bw)
+		bwio.Copy(bwdst, bwsrc, *bw)
+
 	} else {
 		_, err = io.Copy(dst, src)
 	}

@@ -31,7 +31,7 @@ func main() {
 		DisableCompression: true,
 	}
 
-	client := &http.Client{Transport:tr}
+	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", url, nil)
 	req.Proto = "HTTP/1.1"
 

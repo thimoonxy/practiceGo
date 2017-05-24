@@ -17,15 +17,42 @@ import (
 )
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	// Vars
 	global_timeout := 30 * time.Second
-	std := StdJudge(os.Stdin, global_timeout)
-	hostlist := HostListGen(std, 22)
-	PassWd := []ssh.AuthMethod{ssh.Password("xxx")}
-	Conf := &ssh.ClientConfig{User: "root", Auth: PassWd, Timeout: 5 * time.Second}
+	conn_timeout := 5 * time.Second
+	default_port := 22
+	username := "root"
+	password := "xxx"
 	onetime := 6
+
+	// Processing
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	auth := []ssh.AuthMethod{}
+	if !ReadKey(&auth) {
+		PassWd := ssh.Password(password)
+		auth = append(auth, PassWd)
+	}
+	std := StdJudge(os.Stdin, global_timeout)
+	hostlist := HostListGen(std, default_port)
+	Conf := &ssh.ClientConfig{User: username, Auth: auth, Timeout: conn_timeout}
 	RunCtl(hostlist, onetime, Conf)
 
+}
+
+func ReadKey(privateKey *[]ssh.AuthMethod) bool {
+	shellhome := os.Getenv("HOME")
+	sep := string(os.PathSeparator)
+	sshkey := strings.Join([]string{shellhome, ".ssh", "id_rsa"}, sep)
+	buf, err := ioutil.ReadFile(sshkey)
+	if err != nil {
+		return false
+	}
+	signer, err := ssh.ParsePrivateKey(buf)
+	if err != nil {
+		return false
+	}
+	*privateKey = append(*privateKey, ssh.PublicKeys(signer))
+	return true
 }
 
 func RunCtl(hostlist []string, onetime int, conf *ssh.ClientConfig) {

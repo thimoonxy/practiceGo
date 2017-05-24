@@ -16,9 +16,10 @@ import (
 	"time"
 )
 
+var DEADLINE int = 3 // Cmd run will be closed after DEADLINE seconds
 func main() {
 	// Vars
-	global_timeout := 30 * time.Second
+	global_timeout := 30 * time.Second // Whole process timeout time
 	conn_timeout := 5 * time.Second
 	default_port := 22
 	username := "root"
@@ -138,13 +139,33 @@ func HostListGen(raw []byte, default_port int) []string {
 	}
 	return result
 }
+func DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	d := net.Dialer{Timeout: timeout, Deadline: time.Now().Add(time.Duration(DEADLINE) * time.Second)}
+	return d.Dial(network, address)
+}
+func Dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	conn, err := DialTimeout(network, addr, config.Timeout)
+	if err != nil {
+		return nil, err
+	}
+	//conn.SetDeadline(DEADLINE)
+	conn.SetDeadline(time.Now().Add(time.Duration(DEADLINE) * time.Second))
+
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.NewClient(c, chans, reqs), nil
+}
 
 func SSH(Conf *ssh.ClientConfig, ip_port string) string {
 
 	var r *bufio.Reader
 	//PassWd := []ssh.AuthMethod{ssh.Password(password)}
 	//Conf := ssh.ClientConfig{User: user, Auth: PassWd, Timeout: 5 * time.Second}
-	Client, err := ssh.Dial("tcp", ip_port, Conf)
+	//Client, err := ssh.Dial("tcp", ip_port, Conf)
+	Client, err := Dial("tcp", ip_port, Conf)
+
 	if err != nil {
 		return ip_port + ": " + err.Error()
 	}

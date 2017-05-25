@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"io"
@@ -16,34 +17,78 @@ import (
 	"time"
 )
 
-var DEADLINE int = 3 // Cmd run will be closed after DEADLINE seconds
+// Global Vars
+var DEADLINE *int
+var ARGS string
+
 func main() {
 	// Vars
-	global_timeout := 30 * time.Second // Whole process timeout time
-	conn_timeout := 5 * time.Second
-	default_port := 22
-	username := "root"
-	password := "xxx"
-	onetime := 6
-
-	// Processing
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	auth := []ssh.AuthMethod{}
-	if !ReadKey(&auth) {
-		PassWd := ssh.Password(password)
-		auth = append(auth, PassWd)
-	}
-	std := StdJudge(os.Stdin, global_timeout)
-	hostlist := HostListGen(std, default_port)
-	Conf := &ssh.ClientConfig{User: username, Auth: auth, Timeout: conn_timeout}
-	RunCtl(hostlist, onetime, Conf)
-
-}
-
-func ReadKey(privateKey *[]ssh.AuthMethod) bool {
+	var (
+		onetime, default_port        *int
+		username, password, sshkey   *string
+		global_timeout, conn_timeout time.Duration
+	)
 	shellhome := os.Getenv("HOME")
 	sep := string(os.PathSeparator)
-	sshkey := strings.Join([]string{shellhome, ".ssh", "id_rsa"}, sep)
+	default_sshkey := strings.Join([]string{shellhome, ".ssh", "id_rsa"}, sep)
+
+	// Flags & Args
+	var async *bool = new(bool)
+	flag.BoolVar(async, "a", false, "Enable `async` Mode instead of Default Sync Mode. ")
+	onetime = flag.Int("b", 10, "Set `onetime` Wait Group counter to control goroutines number. Note: only needed in Sync Mode. ")
+	default_port = flag.Int("p", 22, "SSH TCP `default_port` number. ")
+	t := flag.Int("t", 5, "SSH connection `conn_timeout`. ")
+	T := flag.Int("T", 300, "Whole process  `global_timeout`.")
+	DEADLINE = flag.Int("d", 200, "Remote CMD in ssh session will be closed after `DEADLINE` seconds. ")
+	username = flag.String("n", "root", "Unix `username`.")
+	password = flag.String("P", "xxx", "Plain Unix account `password`. ")
+	sshkey = flag.String("i", default_sshkey, "Private `sshkey` file path. ")
+	flag.Parse()
+	conn_timeout = time.Duration(*t) * time.Second
+	global_timeout = time.Duration(*T) * time.Second
+	ARGS = strings.Join(flag.Args(), " ")
+
+	// Pre-Processing
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	auth := []ssh.AuthMethod{}
+	ReadKey(*sshkey, &auth)
+	PassWd := ssh.Password(*password)
+	auth = append(auth, PassWd)
+
+	std := StdJudge(os.Stdin, global_timeout)
+	hostlist := HostListGen(std, *default_port)
+	Conf := &ssh.ClientConfig{User: *username, Auth: auth, Timeout: conn_timeout}
+
+	// Processing
+	if *async {
+		fmt.Println("Async Mode running ...")
+		Run(hostlist, *onetime, Conf)
+	} else {
+		fmt.Println("Sync Mode running ...")
+		RunCtl(hostlist, *onetime, Conf)
+	}
+}
+
+func Run(hostlist []string, onetime int, conf *ssh.ClientConfig) {
+	sum := len(hostlist)
+	if sum <= onetime {
+		onetime = sum
+	}
+	stdout := make(chan string, sum)
+	for i := 0; i < sum; i++ {
+		go func(idx int) {
+			stdout <- SSH(conf, hostlist[idx])
+		}(i)
+	}
+	// printout
+	//close(stdout)
+	for i := 0; i < sum; i++ {
+		fmt.Println(<-stdout)
+	}
+}
+
+func ReadKey(sshkey string, privateKey *[]ssh.AuthMethod) bool {
+
 	buf, err := ioutil.ReadFile(sshkey)
 	if err != nil {
 		return false
@@ -140,7 +185,7 @@ func HostListGen(raw []byte, default_port int) []string {
 	return result
 }
 func DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
-	d := net.Dialer{Timeout: timeout, Deadline: time.Now().Add(time.Duration(DEADLINE) * time.Second)}
+	d := net.Dialer{Timeout: timeout, Deadline: time.Now().Add(time.Duration(*DEADLINE) * time.Second)}
 	return d.Dial(network, address)
 }
 func Dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
@@ -149,7 +194,7 @@ func Dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
 		return nil, err
 	}
 	//conn.SetDeadline(DEADLINE)
-	conn.SetDeadline(time.Now().Add(time.Duration(DEADLINE) * time.Second))
+	conn.SetDeadline(time.Now().Add(time.Duration(*DEADLINE) * time.Second))
 
 	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
 	if err != nil {
@@ -172,7 +217,7 @@ func SSH(Conf *ssh.ClientConfig, ip_port string) string {
 	defer Client.Close()
 
 	if len(os.Args) >= 2 {
-		s := strings.NewReader(os.Args[1])
+		s := strings.NewReader(ARGS)
 		r = bufio.NewReader(s)
 	} else {
 		fmt.Println("No cmd in Args.")
